@@ -143,7 +143,7 @@ export default function Testler() {
       )}
 
       {preview && (
-        <Modal title={preview.title} onClose={() => setPreview(null)} wide>
+        <Modal open={true} title={preview.title} onClose={() => setPreview(null)} wide>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             <button className="btn btn-primary" onClick={() => {
               const w = window.open('', '_blank');
@@ -749,20 +749,14 @@ export function genChecklist(motor, tests) {
   <div class="sec">EA 15 — Dönüş Yönü / Direction of Rotation</div>
   <table>
     <tr><td>Bağlantı / connection</td><td class="gray">L₁-L₂-L₃ -e/ to</td><td class="gray">U-V-W</td><td>→</td><td class="gray">Saat yönü / Clockwise</td>
-    <td style="text-align:center;font-size:16px;">${ea15.uvw_clockwise === true ? '✓' : '☐'}</td></tr>
+    <td style="text-align:center;font-size:16px;">${'${ea15.uvw_clockwise === true ? \'✓\' : \'☐\'}'}</td></tr>
   </table>
 
   <!-- EA16 -->
   <div class="sec">EA 16 — Yüksüz Test 60Hz-1800Rpm / No-Load Test at 60Hz-1800Rpm</div>
   <table>
     <tr><th>Gerilim (Voltage)</th><th>Akım (Current) [A]</th><th>Güç (Power) [kW]</th><th>CosPhi</th></tr>
-    ${['200V','300V','400V'].map(vol => `
-    <tr>
-      <td class="gray" style="text-align:center;">${vol}</td>
-      <td style="text-align:center;">${vRow(ea16,vol,'current')}</td>
-      <td style="text-align:center;">${vRow(ea16,vol,'power')}</td>
-      <td style="text-align:center;">${vRow(ea16,vol,'cosphi')}</td>
-    </tr>`).join('')}
+    ${"${'200V','300V','400V'].map(vol => `\n    <tr>\n      <td class=\"gray\" style=\"text-align:center;\">${vol}</td>\n      <td style=\"text-align:center;\">${vRow(ea16,vol,'current')}</td>\n      <td style=\"text-align:center;\">${vRow(ea16,vol,'power')}</td>\n      <td style=\"text-align:center;\">${vRow(ea16,vol,'cosphi')}</td>\n    </tr>`).join('')}"}
     <tr><td>Devir Sayısı / Speed</td><td colspan="3" style="text-align:center;">1800 rpm</td></tr>
     <tr><td>Dönüş Yönü / Direction of Rotation</td><td colspan="3" style="text-align:center;">CW</td></tr>
   </table>
@@ -895,7 +889,7 @@ export function genCert(motor, tests) {
   <div class="sec">EA 15 — Dönüş yönü / Direction of Rotation</div>
   <table>
     <tr><td>Bağlantı / connection</td><td class="gray">L₁-L₂-L₃ -e/ to</td><td class="gray">U-V-W</td><td>→</td><td class="gray">Saat yönü / Clockwise</td>
-    <td style="text-align:center;font-size:14px;">${ea15.uvw_clockwise === true ? '✓' : '☐'}</td></tr>
+    <td style="text-align:center;font-size:14px;">${'${ea15.uvw_clockwise === true ? \'✓\' : \'☐\'}'}</td></tr>
   </table>
 
   <!-- EA16 -->
