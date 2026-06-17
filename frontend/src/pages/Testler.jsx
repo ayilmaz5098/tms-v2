@@ -44,7 +44,7 @@ export default function Testler() {
     if (!motor) return;
     let html, title;
     if (type === 'checklist') { html = genChecklist(motor, tests); title = 'Teknik Kontrol Listesi'; }
-    else if (type === 'cert') { html = genCert(motor, tests); title = 'KOM-TUR-FRM-071 Denetim Sertifikası'; }
+    else if (type === 'cert') { html = genCert(motor, tests); title = '3.1 Sertifikası'; }
     else { html = genTimingReport(motor, tests); title = 'Motor Test Süre Raporu'; }
     setPreview({ title: `${motor.motor_sn} — ${title}`, html });
   }
@@ -57,7 +57,7 @@ export default function Testler() {
           {motorId && (
             <>
               <button className="btn btn-ghost btn-sm" onClick={() => openReport('checklist')}>📄 Kontrol Listesi</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => openReport('cert')}>📋 Denetim Sertifikası</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => openReport('cert')}>📋 3.1 Sertifikası</button>
               <button className="btn btn-ghost btn-sm" onClick={() => openReport('timing')}>⏱ Süre Raporu</button>
             </>
           )}
@@ -156,7 +156,7 @@ export default function Testler() {
   );
 }
 
-// ─── Test Step Panel ──────────────────────────────────────
+// ─── Test Step Panel ──────────────────────────────────────────────
 function TestStepPanel({ step, test, motorId, onSaved, isAdmin, currentUser }) {
   const qc = useQueryClient();
   const isCompleted = test?.status === 'completed';
@@ -469,9 +469,9 @@ function TestStepPanel({ step, test, motorId, onSaved, isAdmin, currentUser }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════
 // REPORT GENERATORS
-// ═══════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════
 const CSS = `
   body{font-family:Arial,sans-serif;font-size:11px;color:#000;margin:16px;line-height:1.4;}
   table{width:100%;border-collapse:collapse;margin:4px 0;}
@@ -548,7 +548,7 @@ function vRow(data, voltage, col) {
   return row[col] !== undefined && row[col] !== '' ? String(row[col]) : '—';
 }
 
-// ─── Teknik Kontrol Listesi Report ───────────────────────
+// ─── Teknik Kontrol Listesi Report ─────────────────────────────────────
 export function genChecklist(motor, tests) {
   const ez01 = d(tests, 'EZ01_EZ02');
   const ea08 = d(tests, 'EA08');
@@ -564,6 +564,11 @@ export function genChecklist(motor, tests) {
   const ea45 = d(tests, 'EA45');
   const ea07 = d(tests, 'EA07');
   const ez18 = d(tests, 'EZ18');
+
+  const operatorName = tests
+    .filter(t => t.status === 'completed')
+    .map(t => t.operator_name_override || t.completed_by_name || t.started_by_name)
+    .find(Boolean) || '—';
 
   return `<style>${CSS}</style>
   ${rptHdr(motor)}
@@ -622,7 +627,7 @@ export function genChecklist(motor, tests) {
   <!-- EA02 -->
   <div class="sec">EA 02 — Ortam Sıcaklığında Sargılardaki Yalıtım Direncinin Ölçülmesi / Measurement of Insulation Resistance at Ambient Temperature</div>
   <table>
-    <tr><td>Sargılardan şaseye direnç 500V'da (Insulation resistance at 500V)</td><td style="text-align:center;">${v(ea02,'insulation_500v')} MΩ</td></tr>
+    <tr><td>Sargılardan şasaya direnç 500V'da (Insulation resistance at 500V)</td><td style="text-align:center;">${v(ea02,'insulation_500v')} MΩ</td></tr>
     <tr><td>Kaçak Akım 60 sn 3.8kV maks. dayanım gerilimi (Leakage current at 3.8kV for 60s)</td><td style="text-align:center;">${v(ea02,'leakage_3k8')} mA</td></tr>
   </table>
 
@@ -647,10 +652,9 @@ export function genChecklist(motor, tests) {
   <!-- EZ18 -->
   <div class="sec">EZ 18 — Hız Sensörünün İşlevsel Testi, Darbe Sapması / Speed Sensor Functional Test</div>
   <table>
-    <tr><th>Darbe Sapması / Pulse Deviation (Max 2.6)</th><th>Sonuç / Result</th></tr>
+    <tr><th>Darbe Sapması / Pulse Deviation (Max 2.6)</th></tr>
     <tr>
       <td style="text-align:center;">${v(ez18,'deviation')}</td>
-      <td style="text-align:center;">${v(ez18,'result')}</td>
     </tr>
   </table>
 
@@ -678,8 +682,8 @@ export function genChecklist(motor, tests) {
       <td style="text-align:center;">${vRow(ea16,vol,'power')}</td>
       <td style="text-align:center;">${vRow(ea16,vol,'cosphi')}</td>
     </tr>`).join('')}
-    <tr><td>Devir Sayısı / Speed</td><td colspan="3" style="text-align:center;">${v(ea16,'speed')} rpm</td></tr>
-    <tr><td>Dönüş Yönü / Direction</td><td colspan="3" style="text-align:center;">${v(ea16,'direction')}</td></tr>
+    <tr><td>Devir Sayısı / Speed</td><td colspan="3" style="text-align:center;">1800 rpm</td></tr>
+    <tr><td>Dönüş Yönü / Direction of Rotation</td><td colspan="3" style="text-align:center;">CW</td></tr>
   </table>
 
   <!-- EA17 -->
@@ -711,8 +715,8 @@ export function genChecklist(motor, tests) {
   <!-- EA44 -->
   <div class="sec">EA 44 — Yalıtım Direnci Ölçümü / Insulation Resistance Measurement</div>
   <table>
-    <tr><td>Sargılardan şaseye direnç 500V'da (Insulation resistance at 500V)</td><td style="text-align:center;">${v(ea44,'insulation_500v')} MΩ</td></tr>
-    <tr><td>Kaçak Akım 60 sn maks. dayanım gerilimi (Leakage current for 60 sec)</td><td style="text-align:center;">${v(ea44,'leakage')} mA</td></tr>
+    <tr><td>Sargılardan şasaya direnç 500V'da (Insulation resistance at 500V)</td><td style="text-align:center;">${v(ea44,'insulation_500v')} MΩ</td></tr>
+    <tr><td>Kaçak Akım 60 sn maks. dayanım gerilimi (Leakage current for 60 sec)</td><td style="text-align:center;">${v(ea44,'leakage_max')} mA</td></tr>
   </table>
 
   <!-- EA45 -->
@@ -730,13 +734,13 @@ export function genChecklist(motor, tests) {
   </table>
 
   <div class="sig">
-    <div class="sig-box"><strong>TESTİ YAPAN (TESTED BY):</strong><br><br>___________________</div>
+    <div class="sig-box"><strong>TESTİ YAPAN (TESTED BY):</strong><br><br>${operatorName}</div>
     <div class="sig-box"><strong>ONAYLAYAN (APPROVED BY):</strong><br><br>___________________</div>
     <div class="sig-box"><strong>NOT (NOTE):</strong><br><br></div>
   </div>`;
 }
 
-// ─── Motor Test Süre Raporu ───────────────────────────────
+// ─── Motor Test Süre Raporu ────────────────────────────────────────────────
 function genTimingReport(motor, tests) {
   const statorSn = motor.parts?.find(p => p.part_name === 'Stator Seri Numarası')?.serial_number || motor.stator_sn || '—';
   const rotorSn  = motor.rotor_sn || motor.motor_sn || '—';
@@ -839,7 +843,7 @@ function genTimingReport(motor, tests) {
   </div>`;
 }
 
-// ─── KOM-TUR-FRM-071 Denetim Sertifikası Report ──────────
+// ─── KOM-TUR-FRM-071 Denetim Sertifikası Report ──────────────────────
 export function genCert(motor, tests) {
   const ea08 = d(tests, 'EA08');
   const ez03 = d(tests, 'EZ03');
@@ -847,6 +851,11 @@ export function genCert(motor, tests) {
   const ea15 = d(tests, 'EA15');
   const ea16 = d(tests, 'EA16');
   const ea17 = d(tests, 'EA17');
+
+  const operatorName = tests
+    .filter(t => t.status === 'completed')
+    .map(t => t.operator_name_override || t.completed_by_name || t.started_by_name)
+    .find(Boolean) || '—';
 
   return `<style>${CSS}
   .cert-hdr{border:2px solid #333;display:flex;margin-bottom:8px;}
@@ -929,8 +938,8 @@ export function genCert(motor, tests) {
       <td style="text-align:center;">${vRow(ea16,'400V','current')}</td>
       <td style="text-align:center;">${vRow(ea16,'400V','power')}</td>
       <td style="text-align:center;">${vRow(ea16,'400V','cosphi')}</td>
-      <td style="text-align:center;">${v(ea16,'speed')}</td>
-      <td style="text-align:center;">${v(ea16,'direction') || 'CW'}</td>
+      <td style="text-align:center;">1800</td>
+      <td style="text-align:center;">CW</td>
       <td></td>
     </tr>
   </table>
@@ -954,7 +963,7 @@ export function genCert(motor, tests) {
   </div>
 
   <div class="sig">
-    <div class="sig-box"><strong>İsim / Name:</strong><br><br>___________________<br><strong>İmza / Signature:</strong><br><br>___________________</div>
+    <div class="sig-box"><strong>İsim / Name:</strong><br><br>${operatorName}<br><strong>İmza / Signature:</strong><br><br>___________________</div>
     <div class="sig-box"><strong>Tarih / Date:</strong><br><br>${today()}</div>
     <div class="sig-box">
       <strong>HAZIRLAYAN</strong><br>Kalite Uzmanı<br><br>
