@@ -285,7 +285,7 @@ function TolerancePanel({ section, stepNum, stepDef, isAdmin }) {
         </tr></thead>
         <tbody>
           {stepDef.meas.map((m, idx) => {
-            if (m.fixed || m.infoOnly) return null;
+            if (m.fixed) return null;
             const ov = overrides.find(o => o.meas_index === idx);
             const isEditing = editing === idx;
             return (
@@ -546,7 +546,7 @@ export default function StepCard({ rotor, section, stepDef, stepState = {}, prev
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="sc-name">
               {stepDef.name}
-              {stepDef.needsQC && <span className="badge b-qp" style={{ fontSize: 9 }}>QC</span>}
+              {effectiveNeedsQC && <span className="badge b-qp" style={{ fontSize: 9 }}>QC</span>}
               {stepDef.hasMeas && <span className="badge" style={{ fontSize: 9, background: 'var(--accent-bg)', color: 'var(--accent)' }}>📏</span>}
             </div>
             <div className="sc-sub">{subLine()}</div>
