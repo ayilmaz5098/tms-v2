@@ -20,10 +20,19 @@ router.post('/projects', auth, requireRole('admin'), async (req, res) => {
 });
 
 router.patch('/projects/:id', auth, requireRole('admin'), async (req, res) => {
-  const { name, code, description } = req.body;
+  const { name, code, description, qc_mode, motor_tolerances } = req.body;
   const { rows } = await pool.query(
-    'UPDATE projects SET name=COALESCE($1,name), code=COALESCE($2,code), description=COALESCE($3,description) WHERE id=$4 RETURNING *',
-    [name||null, code||null, description||null, req.params.id]
+    `UPDATE projects SET
+       name=COALESCE($1,name),
+       code=COALESCE($2,code),
+       description=COALESCE($3,description),
+       qc_mode=COALESCE($4,qc_mode),
+       motor_tolerances=COALESCE($5::jsonb,motor_tolerances)
+     WHERE id=$6 RETURNING *`,
+    [name||null, code||null, description||null,
+     qc_mode !== undefined ? qc_mode : null,
+     motor_tolerances !== undefined ? JSON.stringify(motor_tolerances) : null,
+     req.params.id]
   );
   res.json(rows[0]);
 });
@@ -31,7 +40,6 @@ router.patch('/projects/:id', auth, requireRole('admin'), async (req, res) => {
 router.delete('/projects/:id', auth, requireRole('admin'), async (req, res) => {
   const { rows: [p] } = await pool.query('SELECT * FROM projects WHERE id=$1', [req.params.id]);
   if (!p) return res.status(404).json({ error: 'Not found' });
-  // Soft delete
   await pool.query('UPDATE projects SET active=false WHERE id=$1', [req.params.id]);
   await pool.query('INSERT INTO audit_log (user_id,user_name,action,detail) VALUES ($1,$2,$3,$4)',
     [req.user.id, req.user.name, 'PROJE_SİL', `${p.name} projesi silindi`]);
@@ -138,7 +146,8 @@ router.delete('/documents/:id', auth, requireRole('admin'), async (req, res) => 
 router.get('/motors', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT m.*, p.name as project_name, r.serial_no as rotor_sn, u.name as created_by_name,
+      `SELECT m.*, p.name as project_name, p.qc_mode, p.motor_tolerances,
+              r.serial_no as rotor_sn, u.name as created_by_name,
               rp.field_timestamps
        FROM motors m LEFT JOIN projects p ON p.id=m.project_id
        LEFT JOIN rotors r ON r.id=m.rotor_id LEFT JOIN users u ON u.id=m.created_by
@@ -162,8 +171,12 @@ router.get('/motors', auth, async (req, res) => {
 router.get('/motors/:id', auth, async (req, res) => {
   try {
     const { rows: [motor] } = await pool.query(
-      `SELECT m.*, r.serial_no as rotor_sn, r.shaft_no FROM motors m
-       LEFT JOIN rotors r ON r.id=m.rotor_id WHERE m.id=$1`, [req.params.id]
+      `SELECT m.*, r.serial_no as rotor_sn, r.shaft_no,
+              p.qc_mode, p.motor_tolerances
+       FROM motors m
+       LEFT JOIN rotors r ON r.id=m.rotor_id
+       LEFT JOIN projects p ON p.id=m.project_id
+       WHERE m.id=$1`, [req.params.id]
     );
     if (!motor) return res.status(404).json({ error: 'Not found' });
     const { rows: parts } = await pool.query(
@@ -208,7 +221,6 @@ router.post('/motors/:id/parts', auth, async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-// PATCH /api/motors/:motorId/parts/:partId/admin-edit  — admin only
 router.patch('/motors/:motorId/parts/:partId/admin-edit', auth, requireRole('admin'), async (req, res) => {
   const { enteredAtOverride, enteredByNameOverride } = req.body;
   const updates = [];
@@ -231,7 +243,6 @@ router.post('/motors/:id/lock', auth, requireRole('admin','operator'), async (re
   res.json(rows[0]);
 });
 
-// Unlock motor (admin only — reopen)
 router.post('/motors/:id/unlock', auth, requireRole('admin'), async (req, res) => {
   const { rows } = await pool.query('UPDATE motors SET status=$1 WHERE id=$2 RETURNING *', ['assembly_pending', req.params.id]);
   await pool.query('INSERT INTO audit_log (user_id,user_name,action,detail) VALUES ($1,$2,$3,$4)',
@@ -239,7 +250,6 @@ router.post('/motors/:id/unlock', auth, requireRole('admin'), async (req, res) =
   res.json(rows[0]);
 });
 
-// Update motor info
 router.patch('/motors/:id', auth, requireRole('admin'), async (req, res) => {
   const { motorSn, notes, projectId } = req.body;
   const { rows } = await pool.query(
@@ -253,7 +263,6 @@ router.patch('/motors/:id', auth, requireRole('admin'), async (req, res) => {
   res.json(rows[0]);
 });
 
-// Delete motor (admin only)
 router.delete('/motors/:id', auth, requireRole('admin'), async (req, res) => {
   const { rows: [m] } = await pool.query('SELECT * FROM motors WHERE id=$1', [req.params.id]);
   if (!m) return res.status(404).json({ error: 'Not found' });
@@ -269,18 +278,14 @@ router.delete('/motors/:id', auth, requireRole('admin'), async (req, res) => {
 router.post('/motors/:motorId/photos', auth, upload.single('photo'), async (req, res) => {
   const { motorId } = req.params;
   const { note } = req.body;
-  // Verify motor exists
   const { rows: [motor] } = await pool.query('SELECT * FROM motors WHERE id=$1', [motorId]);
   if (!motor) return res.status(404).json({ error: 'Motor not found' });
 
-  // Store under a special rotor_id=0 entry or use a separate table
-  // Simplest: store in photos table with rotor_id=NULL and a note about motor
   const { rows } = await pool.query(
     `INSERT INTO photos (rotor_id, filename, filepath, section, step_name, note, uploaded_by)
      VALUES (NULL, $1, $2, 'motor', $3, $4, $5) RETURNING *`,
     [req.file.originalname, req.file.path, `Motor-${motor.motor_sn}`, note||null, req.user.id]
   );
-  // Also store reference in motor_parts as metadata
   await pool.query(
     `INSERT INTO motor_parts (motor_id, part_name, serial_number, entered_by)
      VALUES ($1, 'photo_ref', $2, $3)
@@ -290,7 +295,6 @@ router.post('/motors/:motorId/photos', auth, upload.single('photo'), async (req,
 
   let imgData = null;
   try {
-    const fs = require('fs');
     const buf = fs.readFileSync(req.file.path);
     imgData = `data:image/jpeg;base64,${buf.toString('base64')}`;
   } catch {}
@@ -310,7 +314,6 @@ router.get('/motors/:motorId/photos', auth, async (req, res) => {
     [`Motor-${motor.motor_sn}`]
   );
 
-  const fs = require('fs');
   const withData = rows.map(p => {
     let imgData = null;
     try {
@@ -325,9 +328,7 @@ router.get('/motors/:motorId/photos', auth, async (req, res) => {
 });
 
 
-
-
-// ─── STEP EQUIPMENT ──────────────────────────────────────
+// ─── STEP EQUIPMENT ────────────────────────────────────────
 router.get('/step-equipment/:section/:step', auth, async (req, res) => {
   const { rows } = await pool.query(
     'SELECT * FROM step_equipment WHERE section=$1 AND step_number=$2 ORDER BY id',
@@ -349,7 +350,7 @@ router.delete('/step-equipment/:id', auth, requireRole('admin'), async (req, res
   res.json({ ok: true });
 });
 
-// ─── STEP TOLERANCES ─────────────────────────────────────
+// ─── STEP TOLERANCES ───────────────────────────────────────────
 router.get('/step-tolerances/:section/:step', auth, async (req, res) => {
   const { rows } = await pool.query(
     'SELECT * FROM step_tolerances WHERE section=$1 AND step_number=$2 ORDER BY meas_index',
@@ -376,7 +377,7 @@ router.delete('/step-tolerances/:section/:step/:meas_index', auth, requireRole('
   res.json({ ok: true });
 });
 
-// ─── STEP DRAWINGS (Admin-managed Drive links per step) ──
+// ─── STEP DRAWINGS ───
 router.get('/step-drawings/:section/:step', auth, async (req, res) => {
   const { section, step } = req.params;
   const { rows } = await pool.query(
@@ -390,7 +391,6 @@ router.post('/step-drawings/:section/:step', auth, requireRole('admin'), async (
   const { section, step } = req.params;
   const { label, url } = req.body;
   if (!label?.trim() || !url?.trim()) return res.status(400).json({ error: 'Etiket ve URL gerekli' });
-  // Validate URL is not empty
   const { rows } = await pool.query(
     'INSERT INTO step_drawings (section, step_number, label, url, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *',
     [section, parseInt(step), label.trim(), url.trim(), req.user.id]
@@ -403,7 +403,7 @@ router.delete('/step-drawings/:id', auth, requireRole('admin'), async (req, res)
   res.json({ ok: true });
 });
 
-// ─── STEP MATERIALS (Kullanılacak Malzemeler) ────────────
+// ─── STEP MATERIALS ───
 router.get('/step-materials/:section/:step', auth, async (req, res) => {
   const { section, step } = req.params;
   const { rows } = await pool.query(
@@ -442,7 +442,7 @@ router.patch('/notifications/read-all', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── USERS (admin CRUD + delete) ───
+// ─── USERS ───
 router.delete('/users/:id', auth, requireRole('admin'), async (req, res) => {
   const { rows: [u] } = await pool.query('SELECT * FROM users WHERE id=$1', [req.params.id]);
   if (!u) return res.status(404).json({ error: 'Not found' });
@@ -508,7 +508,7 @@ router.post('/shift', auth, async (req, res) => {
   res.status(201).json(sh);
 });
 
-// ─── ROTOR PARTS (partial) ───
+// ─── ROTOR PARTS ───
 router.post('/rotors/:rotorId/parts/save', auth, async (req, res) => {
   const { rotorId } = req.params;
   const fields = ['shaft_sn','stator_sn','bearing_bracket_sn','bearing_de_sn','bearing_nde_sn','tooth_wheel_sn','coupling_sn','assembly_note'];
@@ -549,7 +549,7 @@ router.get('/dashboard', auth, async (req, res) => {
   });
 });
 
-// ─── MOTOR TESTS ─────────────────────────────────────────
+// ─── MOTOR TESTS ────────────────────────────────────────────────
 router.get('/motors/:motorId/tests', auth, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT mt.*, u1.name as started_by_name, u2.name as completed_by_name
@@ -601,7 +601,6 @@ router.post('/motors/:motorId/tests/:stepCode/complete', auth, async (req, res) 
   res.json(rows[0]);
 });
 
-// PATCH /api/motors/:motorId/tests/:stepCode/admin-edit  — admin only
 router.patch('/motors/:motorId/tests/:stepCode/admin-edit', auth, requireRole('admin'), async (req, res) => {
   const { motorId, stepCode } = req.params;
   const { startedAt, completedAt, operatorNameOverride } = req.body;
