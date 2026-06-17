@@ -165,6 +165,53 @@ export const MOTOR_TEST_STEPS = [
       { key: 'leakage_1k6', label: "1.6kV'da kaçak akım (Leakage current at 1.6kV)", unit: 'mA' },
     ],
   },
+  {
+    code: 'BOYAMA_ARA',
+    name: 'Ara Kaplama — Zemin / Primer Boya',
+    nameEn: 'Intermediate Coat — Primer',
+    type: 'paint',
+    description: 'Yüzey hazırlığı ve zemin boya uygulaması',
+    fields: [
+      { key: 'hava_sicakligi',  label: 'Hava Sıcaklığı / Air Temp', unit: '°C', type: 'number' },
+      { key: 'bagil_nem',       label: 'Bağıl Nem / Relative Humidity', unit: '%', type: 'number' },
+      { key: 'parca_sicakligi', label: 'Parça Yüzey Sıcaklığı / Part Temp', unit: '°C', type: 'number' },
+      { key: 'cig_noktasi',     label: 'Çiğ Noktası / Dew Point', unit: '°C', autoCalc: true, type: 'number' },
+      { key: 'sicaklik_fark',   label: 'Δ Sıcaklık (Parça − Çiğ) / ΔT', unit: '°C', autoCalc: true, type: 'number', tol: { type: 'min', value: 3, label: '≥ 3°C' } },
+      { key: 'ndft',            label: 'NDFT Kuru Film Kalınlığı / Dry Film Thickness', unit: 'μm', type: 'number', tol: { type: 'min', value: 40, label: '≥ 40 μm' } },
+    ],
+  },
+  {
+    code: 'BOYAMA_UST',
+    name: 'Üst Kaplama — Son Kat Boya',
+    nameEn: 'Top Coat — Final Coat',
+    type: 'paint',
+    description: 'Son kat boya uygulaması',
+    fields: [
+      { key: 'hava_sicakligi',  label: 'Hava Sıcaklığı / Air Temp', unit: '°C', type: 'number' },
+      { key: 'bagil_nem',       label: 'Bağıl Nem / Relative Humidity', unit: '%', type: 'number' },
+      { key: 'parca_sicakligi', label: 'Parça Yüzey Sıcaklığı / Part Temp', unit: '°C', type: 'number' },
+      { key: 'cig_noktasi',     label: 'Çiğ Noktası / Dew Point', unit: '°C', autoCalc: true, type: 'number' },
+      { key: 'sicaklik_fark',   label: 'Δ Sıcaklık (Parça − Çiğ) / ΔT', unit: '°C', autoCalc: true, type: 'number', tol: { type: 'min', value: 3, label: '≥ 3°C' } },
+      { key: 'ndft',            label: 'NDFT Kuru Film Kalınlığı / Dry Film Thickness', unit: 'μm', type: 'number', tol: { type: 'min', value: 60, label: '≥ 60 μm' } },
+    ],
+  },
+  {
+    code: 'FINAL_INSPECTION',
+    name: 'Final Kontrol — Sevkiyat Öncesi Son Kontrol',
+    nameEn: 'Final Inspection — Pre-Shipment',
+    type: 'checklist',
+    description: 'Sevkiyat öncesi final kontrol',
+    items: [
+      { key: 'gorsel_muayene',  label: 'Görsel muayene / Visual inspection' },
+      { key: 'isim_plaka',      label: 'İsim plakası (Nameplate) kontrolü' },
+      { key: 'baglanti_kutusu', label: 'Bağlantı kutusunun kontrolü / Terminal box check' },
+      { key: 'boya_kalite',     label: 'Boya kalitesi / Paint quality check' },
+      { key: 'temizlik',        label: 'Makine temizliği / Machine cleanliness' },
+      { key: 'mil_koruma',      label: 'Mil koruması / Shaft protection' },
+      { key: 'dokumantasyon',   label: 'Dokümantasyon tamamlandı / Documentation complete' },
+      { key: 'ambalaj',         label: 'Ambalaj hazır / Packaging ready' },
+    ],
+  },
 ];
 
 export function checkMotorTol(field, value) {

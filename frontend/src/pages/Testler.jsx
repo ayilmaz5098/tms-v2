@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getMotors, getMotorTests, startMotorTest, saveMotorTest, completeMotorTest, adminEditMotorTest } from '../lib/api.js';
 import { useAuthStore } from '../store/auth.js';
-import { MOTOR_TEST_STEPS } from '../lib/motorTestDefs.js';
+import { MOTOR_TEST_STEPS, checkMotorTol } from '../lib/motorTestDefs.js';
 import { Modal } from '../components/shared/index.jsx';
 import tmsLogo from '../tmslogo.jpeg';
 
@@ -21,13 +21,21 @@ function calcDuration(start, end) {
   return `${Math.floor(mins / 60)} sa ${mins % 60} dk`;
 }
 
+function calcDewPoint(tempC, rhPercent) {
+  const a = 17.27, b = 237.7;
+  const rh = rhPercent / 100;
+  if (!rh || isNaN(tempC) || isNaN(rh) || rh <= 0) return null;
+  const gamma = (a * tempC) / (b + tempC) + Math.log(rh);
+  return parseFloat(((b * gamma) / (a - gamma)).toFixed(1));
+}
+
 export default function Testler() {
   const [sp] = useSearchParams();
   const qc = useQueryClient();
   const { user, isAdmin } = useAuthStore();
   const [motorId, setMotorId] = useState(sp.get('motorId') || '');
   const [activeStep, setActiveStep] = useState(null);
-  const [preview, setPreview] = useState(null); // report preview
+  const [preview, setPreview] = useState(null);
 
   const { data: motors = [] } = useQuery('motors', () => getMotors().then(r => r.data));
   const { data: tests = [], refetch: refetchTests } = useQuery(
@@ -153,6 +161,30 @@ export default function Testler() {
   );
 }
 
+// ─── OOT helper ────────────────────────────────────────
+function getOOTFields(step, data) {
+  if (step.type === 'vibration') {
+    if (!step.tol) return [];
+    return (step.sides || []).flatMap(s =>
+      (step.axes || []).map(a => {
+        const key = `${s.key}_${a.toLowerCase()}`;
+        const val = data[key];
+        if (val === undefined || val === '') return null;
+        return checkMotorTol(step, val) === false ? key : null;
+      }).filter(Boolean)
+    );
+  }
+  if (step.type === 'paint' || step.type === 'table') {
+    return (step.fields || []).filter(f => {
+      if (!f.tol || f.autoCalc) return false;
+      const val = data[f.key];
+      if (val === undefined || val === '' || val === null) return false;
+      return checkMotorTol(f, val) === false;
+    }).map(f => f.key);
+  }
+  return [];
+}
+
 // ─── Test Step Card ────────────────────────────────────
 function TestStepCard({ step, test, isAdmin, onStart, onSave, onComplete, onAdminEdit }) {
   const [localData, setLocalData] = useState(test.data || {});
@@ -164,7 +196,7 @@ function TestStepCard({ step, test, isAdmin, onStart, onSave, onComplete, onAdmi
   }, [test.data]);
 
   const isDone = test.status === 'completed';
-  const isStarted = test.status === 'started';
+  const isStarted = test.status === 'in_progress' || test.status === 'started';
 
   function update(path, value) {
     if (path.includes('.')) {
@@ -174,6 +206,8 @@ function TestStepCard({ step, test, isAdmin, onStart, onSave, onComplete, onAdmi
       setLocalData(prev => ({ ...prev, [path]: value }));
     }
   }
+
+  const ootFields = (isStarted || editMode) ? getOOTFields(step, localData) : [];
 
   return (
     <div style={{ border: '1px solid #ddd', borderRadius: 6, marginBottom: 10, overflow: 'hidden' }}>
@@ -186,7 +220,7 @@ function TestStepCard({ step, test, isAdmin, onStart, onSave, onComplete, onAdmi
       </div>
 
       <div style={{ padding: '10px 12px' }}>
-        <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>{step.description}</div>
+        {step.description && <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>{step.description}</div>}
 
         {(isStarted || (isDone && editMode)) && (
           <StepForm step={step} data={localData} onChange={update} />
@@ -196,6 +230,12 @@ function TestStepCard({ step, test, isAdmin, onStart, onSave, onComplete, onAdmi
           <StepDisplay step={step} data={test.data || {}} />
         )}
 
+        {ootFields.length > 0 && (
+          <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 4, padding: '4px 8px', fontSize: 11, color: '#856404', marginBottom: 6 }}>
+            ⚠️ {ootFields.length} ölçüm tolerans dışında: {ootFields.join(', ')}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
           {!isDone && !isStarted && (
             <button className="btn btn-primary" onClick={onStart}>▶ Başlat</button>
@@ -203,7 +243,16 @@ function TestStepCard({ step, test, isAdmin, onStart, onSave, onComplete, onAdmi
           {isStarted && (
             <>
               <button className="btn btn-secondary" onClick={() => onSave(localData)}>💾 Kaydet</button>
-              <button className="btn btn-primary" onClick={() => onComplete(localData)}>✅ Tamamla</button>
+              <button
+                className={`btn ${ootFields.length > 0 ? 'btn-warning' : 'btn-primary'}`}
+                style={ootFields.length > 0 ? { background: '#ffc107', color: '#000', border: '1px solid #e0a800' } : {}}
+                onClick={() => {
+                  if (ootFields.length > 0 && !window.confirm(`${ootFields.length} ölçüm tolerans dışında. Yine de tamamlamak istiyor musunuz?`)) return;
+                  onComplete(localData);
+                }}
+              >
+                ✅ Tamamla{ootFields.length > 0 ? ' ⚠️' : ''}
+              </button>
             </>
           )}
           {isDone && isAdmin && !editMode && (
@@ -221,44 +270,213 @@ function TestStepCard({ step, test, isAdmin, onStart, onSave, onComplete, onAdmi
   );
 }
 
-// ─── Step Form ────────────────────────────────────────
+// ─── Step Form Dispatcher ──────────────────────────────
 function StepForm({ step, data, onChange }) {
-  const fields = step.fields || [];
+  if (step.type === 'checklist') return <ChecklistForm step={step} data={data} onChange={onChange} />;
+  if (step.type === 'multi_row') return <MultiRowForm step={step} data={data} onChange={onChange} />;
+  if (step.type === 'vibration') return <VibrationForm step={step} data={data} onChange={onChange} />;
+  if (step.type === 'paint')     return <PaintForm step={step} data={data} onChange={onChange} />;
+  return <TableForm step={step} data={data} onChange={onChange} />;
+}
 
+// ─── Table Form (default) ──────────────────────────────
+function TableForm({ step, data, onChange }) {
+  const fields = step.fields || [];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, marginBottom: 8 }}>
-      {fields.map(field => (
-        <div key={field.key}>
-          <label style={{ fontSize: 11, color: '#555', display: 'block', marginBottom: 2 }}>
-            {field.label}{field.unit ? ` (${field.unit})` : ''}
-          </label>
-          {field.type === 'select' ? (
-            <select
-              value={getNestedValue(data, field.key) ?? ''}
-              onChange={e => onChange(field.key, e.target.value)}
-              style={{ width: '100%', padding: '4px 6px', fontSize: 12 }}
-            >
-              <option value="">— Seçin —</option>
-              {(field.options || []).map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          ) : field.type === 'checkbox' ? (
-            <input
-              type="checkbox"
-              checked={!!getNestedValue(data, field.key)}
-              onChange={e => onChange(field.key, e.target.checked)}
-            />
-          ) : (
-            <input
-              type={field.type || 'text'}
-              value={getNestedValue(data, field.key) ?? ''}
-              onChange={e => onChange(field.key, field.type === 'number' ? parseFloat(e.target.value) || '' : e.target.value)}
-              style={{ width: '100%', padding: '4px 6px', fontSize: 12 }}
-            />
-          )}
-        </div>
+      {fields.map(field => {
+        const val = getNestedValue(data, field.key);
+        const oot = field.tol && val !== undefined && val !== '' ? checkMotorTol(field, val) === false : false;
+        return (
+          <div key={field.key}>
+            <label style={{ fontSize: 11, color: '#555', display: 'block', marginBottom: 2 }}>
+              {field.label}{field.unit ? ` (${field.unit})` : ''}
+              {field.tol && <span style={{ color: '#888', fontSize: 10 }}> [{field.tol.label}]</span>}
+            </label>
+            {field.type === 'select' ? (
+              <select
+                value={val ?? ''}
+                onChange={e => onChange(field.key, e.target.value)}
+                style={{ width: '100%', padding: '4px 6px', fontSize: 12 }}
+              >
+                <option value="">— Seçin —</option>
+                {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            ) : field.type === 'checkbox' ? (
+              <input type="checkbox" checked={!!val} onChange={e => onChange(field.key, e.target.checked)} />
+            ) : (
+              <input
+                type={field.type || 'text'}
+                value={val ?? ''}
+                onChange={e => onChange(field.key, field.type === 'number' ? parseFloat(e.target.value) || '' : e.target.value)}
+                style={{ width: '100%', padding: '4px 6px', fontSize: 12, border: `1px solid ${oot ? '#c00' : '#ccc'}` }}
+              />
+            )}
+            {oot && <div style={{ fontSize: 9, color: '#c00' }}>⚠️ Tolerans dışı</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Checklist Form ────────────────────────────────────
+function ChecklistForm({ step, data, onChange }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {(step.items || []).map(item => (
+        <label key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={!!data[item.key]}
+            onChange={e => onChange(item.key, e.target.checked)}
+          />
+          {item.label}
+        </label>
       ))}
+    </div>
+  );
+}
+
+// ─── Multi-Row Form (EA09, EA16) ───────────────────────
+function MultiRowForm({ step, data, onChange }) {
+  const voltages = step.hardcoded_voltages || [];
+  const cols = step.cols || [];
+  return (
+    <div style={{ marginBottom: 8, overflowX: 'auto' }}>
+      <table style={{ fontSize: 12, borderCollapse: 'collapse', minWidth: 400 }}>
+        <thead>
+          <tr>
+            <th style={{ padding: '3px 8px', background: '#eee', border: '1px solid #ddd', textAlign: 'left' }}>Gerilim</th>
+            {cols.map(c => (
+              <th key={c.key} style={{ padding: '3px 8px', background: '#eee', border: '1px solid #ddd' }}>
+                {c.label}{c.unit ? ` (${c.unit})` : ''}
+                {c.tol && <div style={{ fontSize: 9, fontWeight: 'normal', color: '#666' }}>[{c.tol.label}]</div>}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {voltages.map(vol => (
+            <tr key={vol}>
+              <td style={{ fontWeight: 'bold', padding: '3px 8px', border: '1px solid #ddd', background: '#f8f8f8' }}>{vol}</td>
+              {cols.map(c => {
+                const val = (data[vol] || {})[c.key];
+                const oot = c.tol && val !== undefined && val !== '' ? checkMotorTol(c, val) === false : false;
+                return (
+                  <td key={c.key} style={{ border: `1px solid ${oot ? '#c00' : '#ddd'}`, padding: 2 }}>
+                    <input
+                      type="number"
+                      value={val ?? ''}
+                      onChange={e => onChange(`${vol}.${c.key}`, e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      style={{ width: 80, padding: '2px 4px', fontSize: 11, border: 'none', outline: 'none' }}
+                    />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {step.hardcoded && (
+        <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+          Devir: {step.hardcoded.speed} | Yön: {step.hardcoded.direction}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Vibration Form (EA17, SE44) ───────────────────────
+function VibrationForm({ step, data, onChange }) {
+  const sides = step.sides || [];
+  const axes = step.axes || [];
+  return (
+    <div style={{ marginBottom: 8, overflowX: 'auto' }}>
+      <table style={{ fontSize: 12, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ padding: '3px 8px', background: '#eee', border: '1px solid #ddd' }}>Yön</th>
+            {sides.map(s => (
+              <th key={s.key} style={{ padding: '3px 8px', background: '#eee', border: '1px solid #ddd' }}>{s.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {axes.map(axis => (
+            <tr key={axis}>
+              <td style={{ fontWeight: 'bold', padding: '3px 8px', border: '1px solid #ddd', background: '#f8f8f8' }}>{axis}</td>
+              {sides.map(s => {
+                const key = `${s.key}_${axis.toLowerCase()}`;
+                const val = data[key];
+                const oot = step.tol && val !== undefined && val !== '' ? checkMotorTol(step, val) === false : false;
+                return (
+                  <td key={s.key} style={{ border: `1px solid ${oot ? '#c00' : '#ddd'}`, padding: 2 }}>
+                    <input
+                      type="number"
+                      value={val ?? ''}
+                      onChange={e => onChange(key, e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      style={{ width: 70, padding: '2px 4px', fontSize: 11, border: 'none', outline: 'none' }}
+                    />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {step.tol && <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>Tolerans: {step.tol.label}</div>}
+    </div>
+  );
+}
+
+// ─── Paint Form (BOYAMA_ARA, BOYAMA_UST) ───────────────
+function PaintForm({ step, data, onChange }) {
+  const fields = step.fields || [];
+
+  React.useEffect(() => {
+    const airTemp = parseFloat(data.hava_sicakligi);
+    const humidity = parseFloat(data.bagil_nem);
+    const partTemp = parseFloat(data.parca_sicakligi);
+    if (!isNaN(airTemp) && !isNaN(humidity) && humidity > 0) {
+      const dp = calcDewPoint(airTemp, humidity);
+      if (dp !== null) {
+        onChange('cig_noktasi', dp);
+        if (!isNaN(partTemp)) {
+          onChange('sicaklik_fark', parseFloat((partTemp - dp).toFixed(1)));
+        }
+      }
+    }
+  }, [data.hava_sicakligi, data.bagil_nem, data.parca_sicakligi]);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8, marginBottom: 8 }}>
+      {fields.map(field => {
+        const val = data[field.key];
+        const oot = field.tol && !field.autoCalc && val !== undefined && val !== '' ? checkMotorTol(field, val) === false : false;
+        return (
+          <div key={field.key}>
+            <label style={{ fontSize: 11, color: '#555', display: 'block', marginBottom: 2 }}>
+              {field.label}{field.unit ? ` (${field.unit})` : ''}
+              {field.tol && !field.autoCalc && <span style={{ color: '#888', fontSize: 10 }}> [{field.tol.label}]</span>}
+              {field.autoCalc && <span style={{ color: '#27ae60', fontSize: 10 }}> (oto)</span>}
+            </label>
+            <input
+              type="number"
+              value={val ?? ''}
+              readOnly={!!field.autoCalc}
+              style={{
+                width: '100%', padding: '4px 6px', fontSize: 12,
+                background: field.autoCalc ? '#f0f8f0' : 'white',
+                fontWeight: field.autoCalc ? 'bold' : 'normal',
+                border: `1px solid ${oot ? '#c00' : '#ccc'}`,
+              }}
+              onChange={!field.autoCalc ? (e => onChange(field.key, e.target.value === '' ? '' : parseFloat(e.target.value))) : undefined}
+            />
+            {oot && <div style={{ fontSize: 9, color: '#c00' }}>⚠️ Tolerans dışı</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -271,18 +489,105 @@ function getNestedValue(obj, path) {
 
 // ─── Step Display ─────────────────────────────────────
 function StepDisplay({ step, data }) {
+  if (step.type === 'checklist') {
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 12, marginBottom: 8 }}>
+        {(step.items || []).map(item => (
+          <span key={item.key} style={{ background: data[item.key] ? '#e8f5e9' : '#fafafa', border: '1px solid #ddd', borderRadius: 3, padding: '2px 6px' }}>
+            {data[item.key] ? '☑' : '☐'} {item.label}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (step.type === 'multi_row') {
+    const voltages = step.hardcoded_voltages || [];
+    const cols = step.cols || [];
+    return (
+      <div style={{ fontSize: 12, marginBottom: 8, overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '2px 6px', background: '#eee', border: '1px solid #ddd' }}>V</th>
+              {cols.map(c => <th key={c.key} style={{ padding: '2px 6px', background: '#eee', border: '1px solid #ddd' }}>{c.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {voltages.map(vol => (
+              <tr key={vol}>
+                <td style={{ fontWeight: 'bold', padding: '2px 6px', border: '1px solid #ddd', background: '#f8f8f8' }}>{vol}</td>
+                {cols.map(c => <td key={c.key} style={{ padding: '2px 6px', border: '1px solid #ddd', textAlign: 'center' }}>{(data[vol] || {})[c.key] ?? '—'}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (step.type === 'vibration') {
+    const sides = step.sides || [];
+    const axes = step.axes || [];
+    return (
+      <div style={{ fontSize: 12, marginBottom: 8, overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '2px 6px', background: '#eee', border: '1px solid #ddd' }}>Yön</th>
+              {sides.map(s => <th key={s.key} style={{ padding: '2px 6px', background: '#eee', border: '1px solid #ddd' }}>{s.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {axes.map(axis => (
+              <tr key={axis}>
+                <td style={{ fontWeight: 'bold', padding: '2px 6px', border: '1px solid #ddd', background: '#f8f8f8' }}>{axis}</td>
+                {sides.map(s => {
+                  const key = `${s.key}_${axis.toLowerCase()}`;
+                  const val = data[key];
+                  const oot = step.tol && val !== undefined && val !== '' ? checkMotorTol(step, val) === false : false;
+                  return <td key={s.key} style={{ padding: '2px 6px', border: '1px solid #ddd', textAlign: 'center', color: oot ? '#c00' : undefined, fontWeight: oot ? 'bold' : undefined }}>{val ?? '—'}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {step.tol && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>Tolerans: {step.tol.label}</div>}
+      </div>
+    );
+  }
+  if (step.type === 'paint') {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 4, fontSize: 12, marginBottom: 8 }}>
+        {(step.fields || []).map(field => {
+          const val = data[field.key];
+          if (val === undefined || val === null || val === '') return null;
+          const oot = field.tol && !field.autoCalc ? checkMotorTol(field, val) === false : false;
+          return (
+            <div key={field.key} style={{ background: field.autoCalc ? '#f0f8f0' : '#f9f9f9', padding: '3px 6px', borderRadius: 3, border: oot ? '1px solid #c00' : undefined }}>
+              <span style={{ color: '#666' }}>{field.label}: </span>
+              <strong style={{ color: oot ? '#c00' : undefined }}>{val}{field.unit ? ` ${field.unit}` : ''}</strong>
+              {oot && <span style={{ color: '#c00', fontSize: 9 }}> ⚠️</span>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  // default: table
   const fields = step.fields || [];
   if (fields.length === 0) return null;
-
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 4, fontSize: 12, marginBottom: 8 }}>
       {fields.map(field => {
         const val = getNestedValue(data, field.key);
         if (val === undefined || val === null || val === '') return null;
+        const oot = field.tol ? checkMotorTol(field, val) === false : false;
         return (
-          <div key={field.key} style={{ background: '#f9f9f9', padding: '3px 6px', borderRadius: 3 }}>
+          <div key={field.key} style={{ background: '#f9f9f9', padding: '3px 6px', borderRadius: 3, border: oot ? '1px solid #c00' : undefined }}>
             <span style={{ color: '#666' }}>{field.label}: </span>
-            <strong>{field.type === 'checkbox' ? (val ? '✓' : '✗') : val}{field.unit ? ` ${field.unit}` : ''}</strong>
+            <strong style={{ color: oot ? '#c00' : undefined }}>
+              {field.type === 'checkbox' ? (val ? '✓' : '✗') : val}{field.unit ? ` ${field.unit}` : ''}
+            </strong>
+            {oot && <span style={{ color: '#c00', fontSize: 9 }}> ⚠️</span>}
           </div>
         );
       })}
