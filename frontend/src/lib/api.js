@@ -90,7 +90,7 @@ export const getStepPhotos  = (rotorId, section, stepNumber) =>
 // ─── Documents ─────────────────────────────────────────────────
 export const getDocuments   = (params) => api.get('/documents', { params });
 export const createDocument = (data)   => api.post('/documents', data);
-export const deleteDocument = (id)     => api.del(`/documents/${id}`);
+export const deleteDocument = (id)     => api.delete(`/documents/${id}`);
 
 // ─── Motors ────────────────────────────────────────────────────
 export const getMotors      = ()           => api.get('/motors');

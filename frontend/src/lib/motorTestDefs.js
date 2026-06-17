@@ -91,7 +91,6 @@ export const MOTOR_TEST_STEPS = [
     type: 'table',
     fields: [
       { key: 'deviation', label: 'Darbe Sapması / Pulse Deviation', unit: '', tol: { type: 'max', value: 2.6, label: 'Max 2.6' } },
-      { key: 'result',    label: 'Sonuç / Result', unit: '' },
     ],
   },
   {
@@ -133,7 +132,7 @@ export const MOTOR_TEST_STEPS = [
   },
   {
     code: 'SE44',
-    name: 'SE 44 — Aşırı Hız Testi 3960 Rpm\'de 120sn Boyunca',
+    name: "SE 44 — Aşırı Hız Testi 3960 Rpm'de 120sn Boyunca",
     nameEn: 'Overspeed Test at 3960 Rpm for 120s',
     type: 'vibration',
     tol: { type: 'max', value: 5.25, label: '<= 5.25 mm/s' },

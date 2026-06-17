@@ -1,23 +1,31 @@
 import React, { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { saveMeasurements, getStepTolerances } from '../../lib/api.js';
+import { saveMeasurements, getStepTolerances, getStepEquipment } from '../../lib/api.js';
 import { useQuery } from 'react-query';
 import { checkTol, tolLabel } from '../../lib/stepDefs.js';
 import { CtxBox, Spinner } from '../shared/index.jsx';
 
-const EQUIPMENT_OPTIONS = [
+const DEFAULT_EQUIPMENT = [
   'Mikrometre', 'Kumpas', 'Komparatör', 'Caliper TMSK007',
   'Dijital Kumpas', 'Brinell Sertlik Ölçer', 'Dijital Mikrometre',
 ];
 
 export default function Measurements({ rotorId, section, stepNum, stepDef, savedMeas = {}, onSaved, disabled }) {
-  // Load admin-overridden tolerances
   const { data: tolOverrides = [] } = useQuery(
     ['step-tolerances', section, stepNum],
     () => getStepTolerances(section, stepNum).then(r => r.data),
     { staleTime: 60000 }
   );
-  // Merge overrides with stepDef defaults
+  const { data: stepEquipment = [] } = useQuery(
+    ['step-equipment', section, stepNum],
+    () => getStepEquipment(section, stepNum).then(r => r.data),
+    { staleTime: 60000 }
+  );
+  const equipmentOptions = React.useMemo(() => {
+    const apiNames = stepEquipment.map(e => e.name);
+    return [...apiNames, ...DEFAULT_EQUIPMENT.filter(d => !apiNames.includes(d))];
+  }, [stepEquipment]);
+
   const meas = React.useMemo(() => (stepDef.meas || []).map((m, i) => {
     const ov = tolOverrides.find(o => Number(o.meas_index) === i);
     if (!ov) return m;
@@ -29,7 +37,7 @@ export default function Measurements({ rotorId, section, stepNum, stepDef, saved
     (stepDef.meas||[]).forEach((_, i) => { init[i] = savedMeas[i]?.actual_value ?? ''; });
     return init;
   });
-  const [equipment, setEquipment] = useState(savedMeas[0]?.equipment || EQUIPMENT_OPTIONS[0]);
+  const [equipment, setEquipment] = useState(savedMeas[0]?.equipment || DEFAULT_EQUIPMENT[0]);
   const [saving, setSaving]     = useState(false);
 
   const allFilled = meas.every((_, i) => values[i] !== '' && values[i] !== undefined);
@@ -49,7 +57,6 @@ export default function Measurements({ rotorId, section, stepNum, stepDef, saved
     if (!equipment) { toast.error('Ölçüm ekipmanı seçiniz'); return; }
     setSaving(true);
     try {
-      // Build measurements — fixed ones auto-set to 0, variable ones from user input
       const measurements = meas
         .map((m, i) => {
           const v = m.fixed ? 0 : parseFloat(values[i]);
@@ -123,7 +130,7 @@ export default function Measurements({ rotorId, section, stepNum, stepDef, saved
           <label className="fl" style={{ marginBottom: 0, whiteSpace: 'nowrap' }}>Ekipman</label>
           <select className="fs" value={equipment} onChange={e => setEquipment(e.target.value)}
             style={{ flex: 1, maxWidth: 220, padding: '5px 8px', fontSize: 12 }}>
-            {EQUIPMENT_OPTIONS.map(o => <option key={o}>{o}</option>)}
+            {equipmentOptions.map(o => <option key={o}>{o}</option>)}
           </select>
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !anyFilled}>
             {saving ? <Spinner size={14} /> : '📏 Ölçümleri Kaydet'}
