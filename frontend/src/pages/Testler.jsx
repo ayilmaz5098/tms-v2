@@ -840,75 +840,172 @@ export function genCert(motor, tests) {
   return parts.join('\n');
 }
 
-// ─── Boyama Son Kontrol Formu ───────────────────────────────────────────
+// ─── Boyama Kontrol Formu (BKM-TUR-FRM-061) ───────────────────────
 export function genPaintReport(motor, tests) {
-  const ara = d(tests, 'BOYAMA_ARA');
-  const ust = d(tests, 'BOYAMA_UST');
-  const rotorSn = motor.rotor_sn || motor.motor_sn || '—';
+  var ara = d(tests, 'BOYAMA_ARA');
+  var ust = d(tests, 'BOYAMA_UST');
+  var rotorSn = motor.rotor_sn || motor.motor_sn || '—';
 
-  const operatorName = tests
-    .filter(t => t.status === 'completed')
-    .map(t => t.operator_name_override || t.completed_by_name || t.started_by_name)
+  var operatorName = tests
+    .filter(function(t) { return t.status === 'completed'; })
+    .map(function(t) { return t.operator_name_override || t.completed_by_name || t.started_by_name; })
     .find(Boolean) || '—';
 
-  function paintRow(label, araVal, ustVal, tol) {
-    const araOot = (tol && araVal !== '—') ? (parseFloat(araVal) < tol ? 'oot' : 'ok') : '';
-    const ustOot = (tol && ustVal !== '—') ? (parseFloat(ustVal) < tol ? 'oot' : 'ok') : '';
-    return '<tr>'
-      + '<td>' + label + '</td>'
-      + '<td class="' + araOot + '" style="text-align:center;">' + araVal + '</td>'
-      + '<td class="' + ustOot + '" style="text-align:center;">' + ustVal + '</td>'
-      + '</tr>';
+  // Helper: two-column label/value cell pair
+  function row2(label, val1, val2) {
+    return '<tr><td style="width:40%;">' + label + '</td>'
+      + '<td style="text-align:center;width:30%;">' + val1 + '</td>'
+      + '<td style="text-align:center;width:30%;">' + val2 + '</td></tr>';
   }
 
-  const parts = [
+  // Helper: env block for one coat's data
+  function envRows(data) {
+    var dt = v(data, 'sicaklik_fark');
+    var dtNum = parseFloat(dt);
+    var dtClass = (!isNaN(dtNum) && dtNum < 3) ? ' class="oot"' : (!isNaN(dtNum) ? ' class="ok"' : '');
+    return '<tr><td>Hava Sıcaklığı [&deg;C]</td>' + tdC(v(data,'hava_sicakligi')) + '</tr>'
+      + '<tr><td>Parça Sıcaklığı [&deg;C]</td>' + tdC(v(data,'parca_sicakligi')) + '</tr>'
+      + '<tr><td>Bağıl Nem [%]</td>' + tdC(v(data,'bagil_nem')) + '</tr>'
+      + '<tr><td>Çiğ Noktası [&deg;C]</td>' + tdC(v(data,'cig_noktasi')) + '</tr>'
+      + '<tr><td>ΔT Parça − Çiğ [&deg;C] &nbsp;<span style="font-size:9px;color:#555;">(min ≥3)</span></td>'
+      + '<td' + dtClass + ' style="text-align:center;">' + dt + '</td></tr>';
+  }
+
+  // NDFT verdict helper
+  function ndftVerdict(val, minVal) {
+    var n = parseFloat(val);
+    if (isNaN(n) || val === '—') return '<td style="text-align:center;">—</td>';
+    return n >= minVal
+      ? '<td class="ok" style="text-align:center;">UYGUN</td>'
+      : '<td class="oot" style="text-align:center;">UYGUN DEĞİL</td>';
+  }
+
+  var araNdft = v(ara, 'ndft');
+  var ustNdft = v(ust, 'ndft');
+
+  var parts = [
+    // ── Header ──────────────────────────────────────────────────────
     '<style>' + CSS + '</style>',
-    '<table style="width:100%;border-collapse:collapse;border:2px solid #333;margin-bottom:8px;">'
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #333;margin-bottom:6px;">'
       + '<tr>'
-      + '<td style="border:1px solid #333;padding:8px;width:100px;text-align:center;vertical-align:middle;">' + LOGO_HTML + '</td>'
-      + '<td style="border:1px solid #333;padding:12px;text-align:center;vertical-align:middle;">'
-      + '<strong style="font-size:14px;">BOYAMA SON KONTROL FORMU</strong><br>'
-      + '<em style="font-size:11px;">Paint Final Inspection Form</em>'
+      + '<td rowspan="2" style="border:1px solid #333;padding:8px;width:90px;text-align:center;vertical-align:middle;">' + LOGO_HTML + '</td>'
+      + '<td rowspan="2" style="border:1px solid #333;padding:10px;text-align:center;vertical-align:middle;">'
+      + '<strong style="font-size:13px;">FORM YÜZEY HAZIRLIĞI VE TEMEL BOYAMA KONTROL FORMU</strong><br>'
+      + '<em style="font-size:10px;">(FORM SURFACE PREPARATION AND BASIC PAINTING CONTROL FORM)</em><br>'
+      + '<span style="font-size:10px;">TMS PN 61-01</span>'
       + '</td>'
-      + '<td style="border:1px solid #333;padding:4px 8px;font-size:10px;min-width:180px;">'
+      + '<td style="border:1px solid #333;padding:4px 8px;font-size:10px;min-width:190px;">'
       + '<table style="border:none;margin:0;width:100%;">'
-      + '<tr><td style="border:none;padding:2px 0;"><b>Rotor Nu.</b></td><td style="border:none;padding:2px 0;text-align:right;">' + rotorSn + '</td></tr>'
-      + '<tr><td style="border:none;padding:2px 0;"><b>Tarih</b></td><td style="border:none;padding:2px 0;text-align:right;">' + today() + '</td></tr>'
+      + '<tr><td style="border:none;padding:1px 0;"><b>Yayınlanma Tarihi</b></td><td style="border:none;text-align:right;">05.02.2026</td></tr>'
+      + '<tr><td style="border:none;padding:1px 0;"><b>Doküman No</b></td><td style="border:none;text-align:right;">BKM-TUR-FRM-061</td></tr>'
+      + '<tr><td style="border:none;padding:1px 0;"><b>Versiyon No/Tarih</b></td><td style="border:none;text-align:right;">00/05.02.2026</td></tr>'
+      + '<tr><td style="border:none;padding:1px 0;"><b>Sayfa No</b></td><td style="border:none;text-align:right;">1/1</td></tr>'
+      + '<tr><td style="border:none;padding:1px 0;"><b>Gözden Geçirme</b></td><td style="border:none;text-align:right;">05.02.2026</td></tr>'
       + '</table></td></tr></table>',
-    '<div class="sec">Ortam Koşulları / Environmental Conditions</div>',
-    '<table>'
-      + '<tr><th>Parametre</th><th>Astar (Primer) — BOYAMA_ARA</th><th>Üst Kat (Top Coat) — BOYAMA_UST</th></tr>'
-      + paintRow('Hava Sıcaklığı (°C)', v(ara, 'hava_sicakligi'), v(ust, 'hava_sicakligi'), null)
-      + paintRow('Bağıl Nem (%)', v(ara, 'bagil_nem'), v(ust, 'bagil_nem'), null)
-      + paintRow('Parça Sıcaklığı (°C)', v(ara, 'parca_sicakligi'), v(ust, 'parca_sicakligi'), null)
-      + paintRow('Çiğ Noktası (°C)', v(ara, 'cig_noktasi'), v(ust, 'cig_noktasi'), null)
-      + paintRow('Sıcaklık Farkı ΔT (°C) [min ≥3]', v(ara, 'sicaklik_fark'), v(ust, 'sicaklik_fark'), 3)
+
+    // ── Motor info row ───────────────────────────────────────────────
+    '<table style="margin-bottom:6px;">'
+      + '<tr>'
+      + '<td style="width:25%;"><b>Test raporu / Test report</b></td><td class="gray" style="width:25%;">61-01</td>'
+      + '<td style="width:25%;"><b>Kontrol Planı No</b></td><td style="width:25%;"></td>'
+      + '</tr>'
+      + '<tr>'
+      + '<td><b>Makine / Parça No</b></td><td class="gray">' + rotorSn + '</td>'
+      + '<td><b>Teknik Resim No</b></td><td></td>'
+      + '</tr>'
+      + '<tr><td><b>Tarih</b></td><td class="gray">' + today() + '</td><td><b>Adet</b></td><td class="gray">1</td></tr>'
       + '</table>',
-    '<div class="sec">Kuru Film Kalınlığı / Dry Film Thickness (NDFT)</div>',
+
+    // ── Yüzey Hazırlığı section ─────────────────────────────────────
+    '<div class="sec">YÜZEY HAZIRLIĞI / SURFACE PREPARATION</div>',
     '<table>'
-      + '<tr><th>Kat / Coat</th><th>NDFT (μm)</th><th>Tolerans</th><th>Sonuç</th></tr>'
-      + (function() {
-          var araVal = v(ara, 'ndft');
-          var ustVal = v(ust, 'ndft');
-          var araOk = araVal !== '—' ? parseFloat(araVal) >= 40 : null;
-          var ustOk = ustVal !== '—' ? parseFloat(ustVal) >= 60 : null;
-          return '<tr><td>Astar (Primer)</td>'
-            + '<td style="text-align:center;">' + araVal + '</td>'
-            + tdGC('≥ 40 μm')
-            + '<td class="' + (araOk === null ? '' : araOk ? 'ok' : 'oot') + '" style="text-align:center;">'
-            + (araOk === null ? '—' : araOk ? 'UYGUN' : 'UYGUN DEĞİL') + '</td></tr>'
-            + '<tr><td>Üst Kat (Top Coat)</td>'
-            + '<td style="text-align:center;">' + ustVal + '</td>'
-            + tdGC('≥ 60 μm')
-            + '<td class="' + (ustOk === null ? '' : ustOk ? 'ok' : 'oot') + '" style="text-align:center;">'
-            + (ustOk === null ? '—' : ustOk ? 'UYGUN' : 'UYGUN DEĞİL') + '</td></tr>';
-        })()
+      + '<tr>'
+      + '<td style="width:55%;"><em>ISO 12944-4\'e Göre Yüzey Hazırlağı</em></td>'
+      + '<td class="gray" style="text-align:center;">Sa 2½ ✓</td>'
+      + '</tr>'
+      + '<tr>'
+      + '<td><em>Kullanılan Kumlama Malzemesi</em></td>'
+      + '<td class="gray" style="text-align:center;">Kumlama (K) Orta</td>'
+      + '</tr>'
+      + '<tr>'
+      + '<td><em>ISO 8503-1\'e Göre Pürüzlülük: Orta (Rz ~ 60 µm)</em></td>'
+      + '<td class="gray" style="text-align:center;">P3 ✓</td>'
+      + '</tr>'
+      + '<tr>'
+      + '<td><em>ISO 8501-3\'e Göre İç Yüzey Hazırlık Seviyesi</em></td>'
+      + '<td class="gray" style="text-align:center;">P3 ✓</td>'
+      + '</tr>'
+      + '<tr>'
+      + '<td><em>ISO 8501-3\'e Göre Dış Yüzey Hazırlık Seviyesi</em></td>'
+      + '<td class="gray" style="text-align:center;">P3 ✓</td>'
+      + '</tr>'
+      + '<tr>'
+      + '<td>Görsel Kontrol Uygun / Visual Check OK</td>'
+      + '<td class="ok" style="text-align:center;">✓ Uygun</td>'
+      + '</tr>'
+      + '<tr>'
+      + '<td>Temizlik: Kumlama artığı, toz veya herhangi bir kalıntı bulunmaz</td>'
+      + '<td class="ok" style="text-align:center;">✓ Temiz</td>'
+      + '</tr>'
       + '</table>',
+
+    // ── Env conditions at surface prep (BOYAMA_ARA) ─────────────────
+    '<div class="sec">YÜZEY HAZIRLIĞI — ORTAM KOŞULLARI (BOYAMA_ARA)</div>',
+    '<table>' + envRows(ara)
+      + '<tr><td>Tarih</td>' + tdC(today()) + '</tr>'
+      + '<tr><td>Adı / İmza</td>' + tdC(operatorName) + '</tr>'
+      + '</table>',
+
+    // ── Temel Kaplama (Primer) ───────────────────────────────────────
+    '<div class="sec">TEMEL KAPLAMA / BASE COAT (BOYAMA_ARA)</div>',
+    '<table>'
+      + '<tr><td style="width:45%;">Kaplama Malzemesinin Adı</td><td class="gray">Seevenax</td><td class="gray" style="font-size:9px;">Renk: RAL</td></tr>'
+      + '<tr><td>Boya Parti No</td><td>—</td><td>Sertleştirici Parti No</td></tr>'
+      + '<tr><td>Astar / Sertleştirici Karışım Oranı (Ağırlıkça)</td>'
+      + '<td class="gray" style="text-align:center;">Referans: 1/8</td>'
+      + '<td class="gray" style="text-align:center;">Ölçülen: 1/8</td></tr>'
+      + '</table>',
+
+    '<table style="margin-top:2px;">'
+      + '<tr><th>NDFT</th><th>Referans Değer (µm)</th><th>Ölçülen Değer (µm)</th><th>Sonuç</th></tr>'
+      + '<tr><td>Dış Yüzey (Exterior)</td>' + tdGC('80') + '<td style="text-align:center;">' + araNdft + '</td>' + ndftVerdict(araNdft, 40) + '</tr>'
+      + '<tr><td>İç Yüzey (Interior)</td>' + tdGC('—') + '<td style="text-align:center;">—</td><td style="text-align:center;">—</td></tr>'
+      + '</table>',
+
+    '<table style="margin-top:2px;">' + envRows(ara)
+      + '<tr><td>Tarih / Saat</td>' + tdC(today()) + '</tr>'
+      + '<tr><td>Adı / İmza</td>' + tdC(operatorName) + '</tr>'
+      + '</table>',
+
+    // ── Üst Kaplama (Top Coat) ───────────────────────────────────────
+    '<div class="sec">ÜST KAPLAMA / TOP COAT (BOYAMA_UST)</div>',
+    '<table style="margin-top:2px;">'
+      + '<tr><th>NDFT</th><th>Referans Değer (µm)</th><th>Ölçülen Değer (µm)</th><th>Sonuç</th></tr>'
+      + '<tr><td>Dış Yüzey (Exterior)</td>' + tdGC('60') + '<td style="text-align:center;">' + ustNdft + '</td>' + ndftVerdict(ustNdft, 60) + '</tr>'
+      + '<tr><td>İç Yüzey (Interior)</td>' + tdGC('—') + '<td style="text-align:center;">—</td><td style="text-align:center;">—</td></tr>'
+      + '</table>',
+
+    '<table style="margin-top:2px;">' + envRows(ust)
+      + '<tr><td>Tarih / Saat</td>' + tdC(today()) + '</tr>'
+      + '<tr><td>Adı / İmza</td>' + tdC(operatorName) + '</tr>'
+      + '</table>',
+
+    // ── Notes ────────────────────────────────────────────────────────
+    '<ul style="margin-top:10px;padding-left:20px;font-size:10px;color:#333;">'
+      + '<li>Korozyona karşı işlenmiş yüzeyleri ve deliklerin korunması gerekmektedir.</li>'
+      + '<li>Yüzeylerde astar olmadan kontrol yapılmalıdır.</li>'
+      + '<li>Kumlama ile astarlama arasındaki süre 6 saati geçmemelidir (bağıl nem %65\'in üzerinde ise maks. 4 saat).</li>'
+      + '<li>NDFT için referans değerler, her ölçüm noktası için minimum değerlerdir.</li>'
+      + '<li>Maksimum ortalama değer 2x NDFT, maksimum tepe değeri ise 3x NDFT\'dir.</li>'
+      + '</ul>',
+
+    // ── Signatures ───────────────────────────────────────────────────
     '<div class="sig">'
       + '<div class="sig-box"><strong>KONTROL EDEN:</strong><br><br>' + operatorName + '</div>'
-      + '<div class="sig-box"><strong>Tarih / Date:</strong><br><br>' + today() + '</div>'
-      + '<div class="sig-box"><strong>ONAYLAYAN</strong><br>Kalite Uzmanı<br><br>___________________</div>'
+      + '<div class="sig-box"><strong>HAZIRLAYAN</strong><br>Kalite Uzmanı<br><br>___________________</div>'
+      + '<div class="sig-box"><strong>ONAYLAYAN</strong><br>Fabrika Müdürü<br><br>___________________</div>'
       + '</div>',
   ];
+
   return parts.join('\n');
 }
