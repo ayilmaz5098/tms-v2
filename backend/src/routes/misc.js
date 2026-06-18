@@ -603,7 +603,7 @@ router.post('/motors/:motorId/tests/:stepCode/complete', auth, async (req, res) 
 
 router.patch('/motors/:motorId/tests/:stepCode/admin-edit', auth, requireRole('admin'), async (req, res) => {
   const { motorId, stepCode } = req.params;
-  const { startedAt, completedAt, operatorNameOverride } = req.body;
+  const { startedAt, completedAt, operatorNameOverride, data } = req.body;
 
   const updates = [];
   const vals = [];
@@ -611,6 +611,7 @@ router.patch('/motors/:motorId/tests/:stepCode/admin-edit', auth, requireRole('a
   if (startedAt !== undefined)            { updates.push(`started_at=$${idx++}`);              vals.push(startedAt || null); }
   if (completedAt !== undefined)          { updates.push(`completed_at=$${idx++}`);            vals.push(completedAt || null); }
   if (operatorNameOverride !== undefined) { updates.push(`operator_name_override=$${idx++}`);  vals.push(operatorNameOverride || null); }
+  if (data !== undefined)                 { updates.push(`data=$${idx++}::jsonb`);             vals.push(JSON.stringify(data)); }
   if (updates.length === 0) return res.status(400).json({ error: 'Güncellenecek alan yok' });
 
   vals.push(motorId, stepCode);

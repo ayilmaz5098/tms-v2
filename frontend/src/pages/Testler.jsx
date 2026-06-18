@@ -118,6 +118,9 @@ export default function Testler() {
             <button className="btn btn-secondary" onClick={() => openReport('3.1 Sertifikası', genCert(motor, tests))}>
               📋 3.1 Sertifikası
             </button>
+            <button className="btn btn-secondary" onClick={() => openReport('Boyama Son Kontrol Formu', genPaintReport(motor, tests))}>
+              🎨 Boyama Son Kontrol Formu
+            </button>
           </div>
 
           <div style={{ marginBottom: 8, fontSize: 13, color: '#555' }}>
@@ -832,6 +835,79 @@ export function genCert(motor, tests) {
       + '<div class="sig-box"><strong>İsim / Name:</strong><br><br>' + operatorName + '<br><strong>İmza / Signature:</strong><br><br>___________________</div>'
       + '<div class="sig-box"><strong>Tarih / Date:</strong><br><br>' + today() + '</div>'
       + '<div class="sig-box"><strong>HAZIRLAYAN</strong><br>Kalite Uzmanı<br><br><strong>ONAYLAYAN</strong><br>Fabrika Müdürü</div>'
+      + '</div>',
+  ];
+  return parts.join('\n');
+}
+
+// ─── Boyama Son Kontrol Formu ───────────────────────────────────────────
+export function genPaintReport(motor, tests) {
+  const ara = d(tests, 'BOYAMA_ARA');
+  const ust = d(tests, 'BOYAMA_UST');
+  const rotorSn = motor.rotor_sn || motor.motor_sn || '—';
+
+  const operatorName = tests
+    .filter(t => t.status === 'completed')
+    .map(t => t.operator_name_override || t.completed_by_name || t.started_by_name)
+    .find(Boolean) || '—';
+
+  function paintRow(label, araVal, ustVal, tol) {
+    const araOot = (tol && araVal !== '—') ? (parseFloat(araVal) < tol ? 'oot' : 'ok') : '';
+    const ustOot = (tol && ustVal !== '—') ? (parseFloat(ustVal) < tol ? 'oot' : 'ok') : '';
+    return '<tr>'
+      + '<td>' + label + '</td>'
+      + '<td class="' + araOot + '" style="text-align:center;">' + araVal + '</td>'
+      + '<td class="' + ustOot + '" style="text-align:center;">' + ustVal + '</td>'
+      + '</tr>';
+  }
+
+  const parts = [
+    '<style>' + CSS + '</style>',
+    '<table style="width:100%;border-collapse:collapse;border:2px solid #333;margin-bottom:8px;">'
+      + '<tr>'
+      + '<td style="border:1px solid #333;padding:8px;width:100px;text-align:center;vertical-align:middle;">' + LOGO_HTML + '</td>'
+      + '<td style="border:1px solid #333;padding:12px;text-align:center;vertical-align:middle;">'
+      + '<strong style="font-size:14px;">BOYAMA SON KONTROL FORMU</strong><br>'
+      + '<em style="font-size:11px;">Paint Final Inspection Form</em>'
+      + '</td>'
+      + '<td style="border:1px solid #333;padding:4px 8px;font-size:10px;min-width:180px;">'
+      + '<table style="border:none;margin:0;width:100%;">'
+      + '<tr><td style="border:none;padding:2px 0;"><b>Rotor Nu.</b></td><td style="border:none;padding:2px 0;text-align:right;">' + rotorSn + '</td></tr>'
+      + '<tr><td style="border:none;padding:2px 0;"><b>Tarih</b></td><td style="border:none;padding:2px 0;text-align:right;">' + today() + '</td></tr>'
+      + '</table></td></tr></table>',
+    '<div class="sec">Ortam Koşulları / Environmental Conditions</div>',
+    '<table>'
+      + '<tr><th>Parametre</th><th>Astar (Primer) — BOYAMA_ARA</th><th>Üst Kat (Top Coat) — BOYAMA_UST</th></tr>'
+      + paintRow('Hava Sıcaklığı (°C)', v(ara, 'hava_sicakligi'), v(ust, 'hava_sicakligi'), null)
+      + paintRow('Bağıl Nem (%)', v(ara, 'bagil_nem'), v(ust, 'bagil_nem'), null)
+      + paintRow('Parça Sıcaklığı (°C)', v(ara, 'parca_sicakligi'), v(ust, 'parca_sicakligi'), null)
+      + paintRow('Çiğ Noktası (°C)', v(ara, 'cig_noktasi'), v(ust, 'cig_noktasi'), null)
+      + paintRow('Sıcaklık Farkı ΔT (°C) [min ≥3]', v(ara, 'sicaklik_fark'), v(ust, 'sicaklik_fark'), 3)
+      + '</table>',
+    '<div class="sec">Kuru Film Kalınlığı / Dry Film Thickness (NDFT)</div>',
+    '<table>'
+      + '<tr><th>Kat / Coat</th><th>NDFT (μm)</th><th>Tolerans</th><th>Sonuç</th></tr>'
+      + (function() {
+          var araVal = v(ara, 'ndft');
+          var ustVal = v(ust, 'ndft');
+          var araOk = araVal !== '—' ? parseFloat(araVal) >= 40 : null;
+          var ustOk = ustVal !== '—' ? parseFloat(ustVal) >= 60 : null;
+          return '<tr><td>Astar (Primer)</td>'
+            + '<td style="text-align:center;">' + araVal + '</td>'
+            + tdGC('≥ 40 μm')
+            + '<td class="' + (araOk === null ? '' : araOk ? 'ok' : 'oot') + '" style="text-align:center;">'
+            + (araOk === null ? '—' : araOk ? 'UYGUN' : 'UYGUN DEĞİL') + '</td></tr>'
+            + '<tr><td>Üst Kat (Top Coat)</td>'
+            + '<td style="text-align:center;">' + ustVal + '</td>'
+            + tdGC('≥ 60 μm')
+            + '<td class="' + (ustOk === null ? '' : ustOk ? 'ok' : 'oot') + '" style="text-align:center;">'
+            + (ustOk === null ? '—' : ustOk ? 'UYGUN' : 'UYGUN DEĞİL') + '</td></tr>';
+        })()
+      + '</table>',
+    '<div class="sig">'
+      + '<div class="sig-box"><strong>KONTROL EDEN:</strong><br><br>' + operatorName + '</div>'
+      + '<div class="sig-box"><strong>Tarih / Date:</strong><br><br>' + today() + '</div>'
+      + '<div class="sig-box"><strong>ONAYLAYAN</strong><br>Kalite Uzmanı<br><br>___________________</div>'
       + '</div>',
   ];
   return parts.join('\n');

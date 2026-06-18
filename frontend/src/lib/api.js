@@ -127,7 +127,7 @@ export const getMotorTests         = (motorId)            => api.get(`/motors/${
 export const startMotorTest        = (motorId, stepCode)  => api.post(`/motors/${motorId}/tests/${stepCode}/start`);
 export const saveMotorTest         = (motorId, stepCode, data) => api.post(`/motors/${motorId}/tests/${stepCode}/save`, { data });
 export const completeMotorTest     = (motorId, stepCode, data) => api.post(`/motors/${motorId}/tests/${stepCode}/complete`, { data });
-export const adminEditMotorTest    = (motorId, stepCode, data) => api.patch(`/motors/${motorId}/tests/${stepCode}/admin-edit`, data);
+export const adminEditMotorTest    = (motorId, stepCode, data) => api.patch(`/motors/${motorId}/tests/${stepCode}/admin-edit`, { data });
 export const adminEditMotorPart    = (motorId, partId, data)   => api.patch(`/motors/${motorId}/parts/${partId}/admin-edit`, data);
 
 export const getStepDrawings   = (section, step) => api.get(`/step-drawings/${section}/${step}`);
